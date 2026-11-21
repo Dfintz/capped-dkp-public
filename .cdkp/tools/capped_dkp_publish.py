@@ -61,12 +61,20 @@ SUMMARY_LIMIT = 200
 RECENT_EVENTS = 250
 CURSOR_BYTES = 4096
 
-# Records that hold private identities, and disciplinary findings. Both are counted in history.json
-# ("omitted") without saying which kind they were, and never shown on the page or in Discord. A penalty's
-# effect on a balance stays visible in the standings; the finding behind it does not.
+# Records that hold private identities, disciplinary findings, and how the guild organises its members:
+# categories, teams, officer role lists, guild-rank and role mappings, rank reads that sync those roles,
+# designated membership characters and manual rank checks. All are counted in history.json ("omitted")
+# without saying which kind they were, and never shown on the page or in Discord. A penalty's effect on a
+# balance stays visible in the standings; the finding behind it does not. A player's current Full/Trial
+# status stays in the standings; the administration behind it does not. A run's team is not copied either
+# (it is not in FIELDS).
 IDENTITY_KINDS = frozenset({"battletag", "discord", "discordname"})
 DISCIPLINARY_KINDS = frozenset({"misclaim", "penaltyappeal", "appealfile"})
-PRIVATE_KINDS = IDENTITY_KINDS | DISCIPLINARY_KINDS
+ORGANISATION_KINDS = frozenset({
+    "category", "team", "teamretire", "teammember",
+    "roles", "rankmap", "rolemap", "guildrefresh", "membership", "verifyrank",
+})
+PRIVATE_KINDS = IDENTITY_KINDS | DISCIPLINARY_KINDS | ORGANISATION_KINDS
 PAGE_ACTIVITY = frozenset({
     "boss", "award", "disenchant", "progression", "tradeaward", "adjust", "repair", "creditrepair", "reverse",
     "improper", "week", "depart", "returned", "policy", "adopt", "cap", "appeal", "plan", "lateplan", "farm",
@@ -111,6 +119,8 @@ LABELS = {
     "reassign": "Earning group reassigned", "shadow": "Shadow pilot started", "cutover": "Cutover declared",
     "bank": "Item banked or sold", "misclaim": "Misclaim finding recorded",
     "penaltyappeal": "Penalty appeal decided", "appealfile": "Penalty appeal filed",
+    "category": "Member category set", "team": "Team created or edited", "teamretire": "Team retired",
+    "teammember": "Team membership changed",
 }
 STATUS_TEXT = {"full": "Full member", "trial": "Trial member"}
 
@@ -1507,12 +1517,12 @@ def attendance_section(players):
 
 
 def loot_rules_section():
-    """Member-facing summary of the authoritative Capped DKP Loot Rules, checked 2026-11-16."""
+    """Member-facing summary of the Capped DKP Loot Rules as the guild runs them, checked 2026-11-21."""
     return [
         '<section aria-labelledby="rules"><h2 id="rules">How our loot works</h2>',
         '<p class="rules-intro">One person, one DKP balance across linked characters and raids. '
-        'Fixed prices, not bidding. This is a member guide: the guild\'s formal Capped DKP Loot Rules and '
-        'published tier class/spec matrix control eligibility and exceptions.</p>',
+        'Fixed prices, not bidding. This is a member guide: the guild\'s formal Capped DKP Loot Rules '
+        'cover the details and exceptions.</p>',
         '<details class="rules-detail" open><summary>Earn DKP &amp; spend at fixed prices</summary>',
         '<p>Earn 5 DKP per boss, 10 for the final boss instead, and a 5-DKP non-farm full-clear bonus once per '
         'raid per reset. Full-clear credit requires every boss with one group. Late arrivals earn from their '
@@ -1521,15 +1531,16 @@ def loot_rules_section():
         'forfeited, not saved for later. New accounts start at 0; there is no DKP decay.</p>',
         table("Fixed item prices in DKP", [("Item", ""), ("Need", "num"), ("Greed", "num")], [
             f'<tr><th scope="row">{name}</th><td class="num">{need}</td><td class="num">{greed}</td></tr>'
-            for name, need, greed in (("Normal gear", 50, 10), ("Trinket or tier token", 75, 15),
-                                     ("Weapon or major BiS item (including top BiS trinkets)", 100, 20))]),
-        '<p>Unlisted gear uses 50 / 10 unless publicly preclassified. Losing a claim costs nothing. '
-        'Resolve items in the announced loot-window order (ascending item ID if unavailable), updating balances '
-        'and Need status before the next item.</p></details>',
+            for name, need, greed in (("Weapon", 100, 20), ("Trinket or tier token", 75, 15),
+                                     ("All other gear", 50, 10))]),
+        '<p>The Loot Master records the price from the item type when the item is opened. Losing a claim costs '
+        'nothing. Resolve items in the announced loot-window order (ascending item ID if unavailable), updating '
+        'balances and Need status before the next item.</p></details>',
         '<details class="rules-detail"><summary>Need: five priority groups, then highest DKP</summary>',
-        '<p>Only Full members may Need, using an eligible linked character/spec in the published matrix. '
-        'A missing or unconfirmed matrix entry cannot qualify. Duplicate tier items are not legitimate Need. '
-        'Use the first eligible group in this order:</p><ol>',
+        '<p>Only Full members may Need, and only for the main spec of the character they are playing in the '
+        'raid: items are bind on pickup, so nothing goes to an alt outside the raid. An off-spec item is Greed. '
+        'Duplicate tier items are not legitimate Need. The Loot Master checks each claim and an uninvolved officer '
+        'verifies the award. Use the first eligible group in this order:</p><ol>',
         '<li>Nonnegative DKP, no Need win this week, can afford the full price.</li>',
         '<li>Nonnegative DKP, no Need win this week, cannot afford the full price.</li>',
         '<li>Nonnegative DKP, already won Need this week, can afford the full price.</li>',
@@ -1537,10 +1548,10 @@ def loot_rules_section():
         '<li>Negative DKP, regardless of earlier Need wins.</li></ol>',
         '<p>Within that group, the highest current balance wins; in debt, that means the least negative. '
         'Only exact balance ties roll. Zero is nonnegative. Priority group always comes before balance.</p>',
-        '<p>Ordinary Need may reach &minus;100 DKP. A confirmed matrix major-upgrade/catch-up exception may reach '
-        '&minus;200, never below, and retains priority over Greed. Skip withdrawn or floor-blocked claims. '
-        'A Need win lowers priority account-wide until the official weekly reset; it does not forbid another '
-        'Need win. Trials cannot Need.</p></details>',
+        '<p>Ordinary Need may reach &minus;100 DKP. An item the Loot Master marks as a major upgrade when opening '
+        'it may take Need down to &minus;200, never below, and keeps priority over Greed. Skip withdrawn or '
+        'floor-blocked claims. A Need win lowers priority account-wide until the official weekly reset; it does '
+        'not forbid another Need win. Trials cannot Need.</p></details>',
         '<details class="rules-detail"><summary>Greed, rolls &amp; unclaimed items</summary>',
         '<p>After awardable Need, resolve eligible off-spec Greed. Need-eligible items cannot be claimed as Greed. '
         'Full members resolve before Trials: affordable Full claims roll. If none can afford it, the '
@@ -1551,8 +1562,9 @@ def loot_rules_section():
         'Missed claimants get one extra shared 30-second call; existing valid rolls stand. A second miss or '
         'an explicit pass withdraws the claim. Reapply priority after withdrawals.</p>',
         '<p>Never force an award. Unclaimed gear is disenchanted or vendored for the guild bank; '
-        'disenchanting costs 0 and does not change Need status. Unlisted non-gear is free and rolled among '
-        'eligible claimants unless a bank rule was announced before claims.</p></details>',
+        'disenchanting costs 0 and does not change Need status. Items that are not gear (tier tokens count as '
+        'gear) are free and rolled among eligible claimants unless a bank rule was announced before claims.'
+        '</p></details>',
         '<details class="rules-detail"><summary>Farm raids, progression exceptions &amp; safeguards</summary>',
         '<p>Farm status needs one week\'s notice. Farm raids give no full-clear bonus: halve each account\'s '
         'weekly boss-credit total for that raid and round up, crediting the increase before each loot award. '
@@ -1571,8 +1583,8 @@ def loot_rules_section():
         'remains authoritative until formal addon cutover. If the addon is unavailable, the same rules and '
         'independent checks apply; if Master Loot or its equivalent is unavailable, pause for an approved process.</p>',
         '</details>',
-        f'<p class="note">Summary checked 2026-11-16. Ask in <a href="{DISCORD_INVITE}" '
-        'rel="noopener noreferrer">Discord</a> for the full policy, tier matrix and appeal process. '
+        f'<p class="note">Summary checked 2026-11-21. Ask in <a href="{DISCORD_INVITE}" '
+        'rel="noopener noreferrer">Discord</a> for the full policy and appeal process. '
         f'The guild\'s <a href="{ADDON_URL}" rel="noopener noreferrer">PWB DKP addon</a> is on CurseForge. '
         'This page does not itself enforce in-game loot.</p></section>',
     ]
@@ -1803,13 +1815,20 @@ def render_page(title, standings, recent, omitted, source_url=None, *, pending=F
     return "\n".join(head + body + ["</body>", "</html>"]) + "\n"
 
 
-def build_site(ledger, title, source_url=None, site_url=None):
+def public_documents(ledger):
+    """The same allowlisted data for workflow and desktop publication."""
     events, omitted = project_events(ledger)
     standings, changed = standings_document(ledger)
     history = {
         "format": HISTORY_FORMAT, "version": SITE_VERSION, "lastEventId": ledger.count,
         "chainHead": ledger.heads[-1], "omitted": omitted, "events": events,
     }
+    return standings, history, changed
+
+
+def build_site(ledger, title, source_url=None, site_url=None):
+    standings, history, changed = public_documents(ledger)
+    events, omitted = history["events"], history["omitted"]
     recent = [event for event in reversed(events) if event["kind"] in PAGE_ACTIVITY][:RECENT_EVENTS]
     files = {
         "index.html": render_page(title, standings, recent, omitted, source_url, site_url=site_url,

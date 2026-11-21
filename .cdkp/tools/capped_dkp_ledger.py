@@ -39,7 +39,7 @@ REPLAY_TIMEOUT_SECONDS = 120
 REPLAY_SCRIPT = Path(__file__).resolve().with_name("capped_dkp_replay.lua")
 LUA_MODULES = (
     "Bootstrap.lua", "Models/PointInfo.lua", "Models/Loot.lua", "Dispatcher.lua",
-    "Rules.lua", "Rolls.lua", "Policy.lua", "Ledger.lua",
+    "Rules.lua", "Rolls.lua", "Teams.lua", "Policy.lua", "Ledger.lua",
 )
 ROW_KEYS = ("account", "activeCap", "balance", "character", "departed", "discordID", "membershipStatus")
 IDENTITY_KINDS = ("account", "rosteradd", "alt", "discord", "depart", "returned")
@@ -103,15 +103,17 @@ def chain_heads(events: list) -> list:
     return heads
 
 
-def write_atomic(path: Path, data: bytes) -> None:
+def write_atomic(path: Path, data: bytes, durable: bool = True) -> None:
+    """Replace path with data. durable=False skips fsync (slow on some Windows disks) for scratch or cache files."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
+            if durable:
+                stream.flush()
+                os.fsync(stream.fileno())
         os.replace(name, path)
     except BaseException:
         try:
@@ -364,18 +366,25 @@ def lua_journal(events: list, rest: dict) -> str:
     return "".join(parts)
 
 
+def lua_command(candidate):
+    if str(candidate).lower().endswith(".dll"):
+        return [sys.executable, "-B", str(Path(__file__).with_name("capped_dkp_lua.py")), str(candidate)]
+    return [candidate]
+
+
 def find_lua(explicit) -> str:
     candidate = explicit or shutil.which("lua")
     if not candidate:
         raise ToolError("Lua 5.1 interpreter not found; pass --lua PATH")
     try:
-        probe = subprocess.run([candidate, "-v"], capture_output=True, text=True, timeout=20, check=False)
+        probe = subprocess.run([*lua_command(candidate), "-v"], capture_output=True, text=True, timeout=20,
+                               check=False)
     except (OSError, subprocess.SubprocessError) as error:
         raise ToolError(
             f"Cannot run the Lua interpreter ({type(error).__name__}); pass --lua PATH to a Lua 5.1 interpreter"
         ) from None
     found = (probe.stdout + probe.stderr).strip()
-    if "Lua 5.1" not in found:
+    if probe.returncode or "Lua 5.1" not in found:
         raise ToolError(f"Lua 5.1 is required to replay the journal; found: {found[:60] or 'nothing'}")
     return candidate
 
@@ -395,7 +404,7 @@ def lua_rows(addon: Path, lua: str, events: list, rest: dict) -> list:
         journal.write_bytes(lua_journal(events, rest).encode("ascii"))
         try:
             run = subprocess.run(
-                [lua, str(REPLAY_SCRIPT), str(folder), str(journal), str(output)],
+                [*lua_command(lua), str(REPLAY_SCRIPT), str(folder), str(journal), str(output)],
                 capture_output=True, text=True, timeout=REPLAY_TIMEOUT_SECONDS, check=False)
         except subprocess.TimeoutExpired:
             raise IntegrityError(f"The addon replay did not finish within {REPLAY_TIMEOUT_SECONDS} seconds") from None
@@ -460,7 +469,7 @@ def verify_ledger(folder, replay: Replay, previous=None) -> Ledger:
     return ledger
 
 
-def ingest(folder, export_path, characters_path, replay: Replay) -> dict:
+def ingest(folder, export_path, characters_path, replay: Replay, durable: bool = True) -> dict:
     folder = Path(folder)
     try:
         _, document = snapshot.read_export(Path(export_path))
@@ -500,9 +509,9 @@ def ingest(folder, export_path, characters_path, replay: Replay) -> dict:
         report(row_differences(rows, lua_rows(replay.addon, replay.lua, events, rest)),
                "Balances or caps differ from an independent addon replay. Nothing was written")
     manifest = build_manifest(events, rows, heads)
-    write_atomic(folder / ROWS, indented(rows))
-    write_atomic(folder / JOURNAL, journal_bytes(events, rest))
-    write_atomic(folder / MANIFEST, indented(manifest))
+    write_atomic(folder / ROWS, indented(rows), durable)
+    write_atomic(folder / JOURNAL, journal_bytes(events, rest), durable)
+    write_atomic(folder / MANIFEST, indented(manifest), durable)
     return {"status": status, "added": added, "events": len(events), "chainHead": heads[-1],
             "replayed": replay.enabled}
 

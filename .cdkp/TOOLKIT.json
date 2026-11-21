@@ -1,13 +1,13 @@
 {
-  "addonVersion": "0.1.42",
+  "addonVersion": "0.1.44",
   "files": {
     "LICENSE": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
     "NOTICE": "c845575867a06f70f6668c40418d45ac1041db01307ddf5fb7053c45076bda7c",
     "tools/capped_dkp_ci.py": "7ba0ac55cbbfb071f8b941ef35a728b48a2d65a5ecefb8793f40ebe8dea93a58",
     "tools/capped_dkp_community.py": "9abe568cba939bb6a7d1bbf0e8f1191d41a1ce6f81516f87ea281f591f7df83f",
-    "tools/capped_dkp_github.py": "fc0fcd30729521491b75040ac30010494e90fe4c586f75aabbaffc5ac8423632",
-    "tools/capped_dkp_ledger.py": "bac3b236c26e1cff0e9e412a2e3add49a74658c88a82730a1734d9019e0b9d11",
-    "tools/capped_dkp_publish.py": "fcf5e28a2274b3d57d6a68b8d866a80214b38fd976f5c35e5a4430e7541d04b0",
+    "tools/capped_dkp_github.py": "a203c8338d04de8e06a41e49540e296dc90b040bc12fb7f79587800bac9f0d40",
+    "tools/capped_dkp_ledger.py": "3b4d653a1b6d8c2df749db6026d511e16a8c1f8340b2d02a9a7064e43f18d646",
+    "tools/capped_dkp_publish.py": "e48a736fe94180dd6a569580f95f8c9e719875419b970abfd19247512f76e9bc",
     "tools/capped_dkp_raidhelper.py": "924a9824179c81a91ea0e6438a01a79044a7d6b8dd9faa3809efa9ffd0cf5b77",
     "tools/capped_dkp_recruitment.py": "98085a78d6e30c46eb5b44749f8b0fc5b4e3f746d1a25a661d758e7a0ed283a0",
     "tools/capped_dkp_snapshot.py": "bead97a433d7935561a73311b01d502a3dc1c9d620fa31d77b402867005d604c",
